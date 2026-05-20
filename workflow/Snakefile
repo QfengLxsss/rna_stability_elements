@@ -1,0 +1,214 @@
+configfile: "configs/project.yaml"
+
+GENCODE_GTF = "data/external/gencode_v29/gencode.v29.annotation.gtf.gz"
+GENCODE_TRANSCRIPT_FASTA = "data/external/gencode_v29/gencode.v29.transcripts.fa.gz"
+
+
+rule all:
+    input:
+        "data/processed/model_leaderboard.tsv",
+        "data/processed/rna_stability_sequence_grammar.tsv",
+        "docs/rna_stability_grammar_interpretation_report.md",
+        "docs/progress_visual_report.md",
+
+
+rule discover_encode_gene_quant:
+    output:
+        series="data/interim/encode_series.tsv",
+        files="data/interim/encode_gene_quant_files.tsv",
+    shell:
+        "rse discover-encode "
+        "--config configs/project.yaml "
+        "--series-out {output.series} "
+        "--files-out {output.files} "
+        "--file-format tsv "
+        "--output-type 'gene quantifications'"
+
+
+rule download_encode_gene_quant:
+    input:
+        "data/interim/encode_gene_quant_files.tsv",
+    output:
+        touch("data/interim/.download_encode_gene_quant.done"),
+    shell:
+        "rse download-files "
+        "--files {input} "
+        "--out-dir data/raw/encode_gene_quant "
+        "--file-format tsv "
+        "--output-type 'gene quantifications' "
+        "--workers 4 && touch {output}"
+
+
+rule build_gene_sense_targets:
+    input:
+        files="data/interim/encode_gene_quant_files.tsv",
+        done="data/interim/.download_encode_gene_quant.done",
+    output:
+        "data/processed/stability_targets_gene_sense.tsv",
+    shell:
+        "rse build-targets "
+        "--files {input.files} "
+        "--out {output} "
+        "--feature-type gene_sense "
+        "--value-column {config[targets][value_column]} "
+        "--pseudocount {config[targets][pseudocount]} "
+        "--min-signal-0h {config[targets][min_signal_0h]} "
+        "--min-cell-lines-per-gene {config[targets][min_cell_lines_per_gene]}"
+
+
+rule build_gene_sense_consensus:
+    input:
+        "data/processed/stability_targets_gene_sense.tsv",
+    output:
+        "data/processed/stability_consensus_targets_gene_sense.tsv",
+    shell:
+        "rse build-consensus-targets "
+        "--targets {input} "
+        "--out {output} "
+        "--target-column log2_stability_6h_2h "
+        "--min-cell-lines {config[targets][min_cell_lines_per_gene]}"
+
+
+rule replicate_qc_gene_sense:
+    input:
+        files="data/interim/encode_gene_quant_files.tsv",
+        done="data/interim/.download_encode_gene_quant.done",
+    output:
+        gene="data/processed/qc_replicate_gene_signal_gene_sense.tsv",
+        experiment="data/processed/qc_replicate_experiment_gene_sense.tsv",
+    shell:
+        "rse replicate-qc "
+        "--files {input.files} "
+        "--gene-out {output.gene} "
+        "--experiment-out {output.experiment} "
+        "--feature-type gene_sense "
+        "--value-column {config[targets][value_column]}"
+
+
+rule build_modeling_master:
+    input:
+        consensus="data/processed/stability_consensus_targets_gene_sense.tsv",
+        replicate_qc="data/processed/qc_replicate_gene_signal_gene_sense.tsv",
+    output:
+        "data/processed/modeling_master_table.tsv",
+    shell:
+        "rse build-modeling-master "
+        "--consensus {input.consensus} "
+        "--replicate-qc {input.replicate_qc} "
+        "--out {output}"
+
+
+rule build_transcript_sequences:
+    input:
+        master="data/processed/modeling_master_table.tsv",
+        gtf=GENCODE_GTF,
+        transcript_fasta=GENCODE_TRANSCRIPT_FASTA,
+    output:
+        "data/processed/transcript_sequences_gencode_v29.tsv",
+    shell:
+        "rse build-transcript-sequences "
+        "--master {input.master} "
+        "--gtf {input.gtf} "
+        "--transcript-fasta {input.transcript_fasta} "
+        "--out {output}"
+
+
+rule merge_master_sequences:
+    input:
+        master="data/processed/modeling_master_table.tsv",
+        sequences="data/processed/transcript_sequences_gencode_v29.tsv",
+    output:
+        "data/processed/modeling_master_with_sequences.tsv",
+    shell:
+        "rse merge-master-sequences "
+        "--master {input.master} "
+        "--sequences {input.sequences} "
+        "--out {output}"
+
+
+rule make_compact_sequence_features:
+    input:
+        "data/processed/modeling_master_with_sequences.tsv",
+    output:
+        "data/processed/sequence_model_features.tsv",
+    shell:
+        "rse make-compact-sequence-features "
+        "--table {input} "
+        "--config configs/project.yaml "
+        "--out {output} "
+        "--target-column target_label "
+        "--k 3 --k 4"
+
+
+rule strict_compact_xgboost:
+    input:
+        "data/processed/sequence_model_features.tsv",
+    output:
+        metrics="data/processed/strict_sequence_model_evaluation_metrics.tsv",
+        predictions="data/processed/strict_sequence_model_evaluation_predictions.tsv",
+        summary="data/processed/strict_sequence_model_evaluation_summary.tsv",
+        importance="data/processed/strict_sequence_xgboost_gpu_importance.tsv",
+    shell:
+        "rse evaluate-sequence-models "
+        "--features {input} "
+        "--target-column target_label "
+        "--model xgboost_gpu "
+        "--feature-set all "
+        "--evaluation repeated_random "
+        "--evaluation chromosome_holdout "
+        "--n-repeats 5 "
+        "--metrics-out {output.metrics} "
+        "--predictions-out {output.predictions} "
+        "--summary-out {output.summary} "
+        "--importance-out {output.importance}"
+
+
+rule compact_elasticnet_interpretation:
+    input:
+        "data/processed/sequence_model_features.tsv",
+    output:
+        metrics="data/processed/compact_elasticnet_for_interpretation_metrics.tsv",
+        predictions="data/processed/compact_elasticnet_for_interpretation_predictions.tsv",
+        summary="data/processed/compact_elasticnet_for_interpretation_summary.tsv",
+        importance="data/processed/compact_elasticnet_for_interpretation_importance.tsv",
+    shell:
+        "rse evaluate-sequence-models "
+        "--features {input} "
+        "--target-column target_label "
+        "--model elasticnet "
+        "--feature-set all "
+        "--evaluation repeated_random "
+        "--evaluation chromosome_holdout "
+        "--n-repeats 5 "
+        "--metrics-out {output.metrics} "
+        "--predictions-out {output.predictions} "
+        "--summary-out {output.summary} "
+        "--importance-out {output.importance}"
+
+
+rule write_progress_report:
+    input:
+        "data/processed/sequence_model_features.tsv",
+    output:
+        "docs/progress_visual_report.md",
+    shell:
+        "rse write-visual-report "
+        "--processed-dir data/processed "
+        "--figure-dir docs/figures "
+        "--out {output}"
+
+
+rule write_grammar_report:
+    input:
+        xgboost_summary="data/processed/strict_sequence_model_evaluation_summary.tsv",
+        xgboost_importance="data/processed/strict_sequence_xgboost_gpu_importance.tsv",
+        elasticnet_importance="data/processed/compact_elasticnet_for_interpretation_importance.tsv",
+    output:
+        leaderboard="data/processed/model_leaderboard.tsv",
+        grammar="data/processed/rna_stability_sequence_grammar.tsv",
+        report="docs/rna_stability_grammar_interpretation_report.md",
+    shell:
+        "rse write-grammar-report "
+        "--processed-dir data/processed "
+        "--figure-dir docs/figures "
+        "--out {output.report}"

@@ -1,0 +1,94 @@
+project:
+  name: rna_stability_elements
+  genome_assembly: GRCh38
+  gene_annotation: GENCODE v29 in ENCODE Bru-seq pipeline
+
+encode:
+  base_url: https://www.encodeproject.org
+  lab_title: Mats Ljungman, UMichigan
+  status: released
+  series_type: PulseChaseTimeSeries
+  expected_assays:
+    - Bru-seq
+    - BruChase-seq
+  file_filters:
+    file_format:
+      - tsv
+    output_type:
+      - genic features quantifications
+
+cell_lines:
+  - paper_name: A673
+    encode_term: A673
+    class: cancer
+  - paper_name: Caco2
+    encode_term: Caco-2
+    class: cancer
+  - paper_name: Calu3
+    encode_term: Calu3
+    class: cancer
+  - paper_name: GM12878
+    encode_term: GM12878
+    class: normal
+  - paper_name: HCT116
+    encode_term: HCT116
+    class: cancer
+  - paper_name: HepG2
+    encode_term: HepG2
+    class: cancer
+  - paper_name: HMEC
+    encode_term: mammary epithelial cell
+    class: normal_primary
+  - paper_name: HUVEC
+    encode_term: endothelial cell of umbilical vein
+    class: normal_primary
+  - paper_name: IMR90
+    encode_term: IMR-90
+    class: normal
+  - paper_name: K562
+    encode_term: K562
+    class: cancer
+  - paper_name: MCF10A
+    encode_term: MCF 10A
+    class: normal
+  - paper_name: MCF7
+    encode_term: MCF-7
+    class: cancer
+  - paper_name: OCILY7
+    encode_term: OCI-LY7
+    class: cancer
+  - paper_name: panc1
+    encode_term: Panc1
+    class: cancer
+  - paper_name: PC3
+    encode_term: PC-3
+    class: cancer
+  - paper_name: PC9
+    encode_term: PC-9
+    class: cancer
+
+targets:
+  feature_type: gene_sense
+  value_column: rpkm
+  pseudocount: 0.1
+  min_signal_0h: 0.5
+  min_cell_lines_per_gene: 8
+
+sequence_features:
+  kmer_ks: [3, 4]
+  motifs:
+    AU-rich: AUUUA
+    Pumilio: UGUANAUA
+    CPE: UUUUAU
+    miR-122-seed: CAAACAC
+    miR-21-seed: UAGCUUA
+
+modeling:
+  default_target: log2_stability_6h_2h
+  split:
+    strategy: context_agnostic_gene_consensus
+    strict_evaluations: [repeated_random, chromosome_holdout]
+  baseline_models:
+    - ridge
+    - elasticnet
+    - random_forest
