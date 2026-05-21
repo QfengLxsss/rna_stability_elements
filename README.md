@@ -6,11 +6,12 @@
 
 ## 文档入口
 
-项目关键信息集中在本 README。更细的实现和结果放在 [docs/](docs/)：
+项目关键信息集中在本 README。更详细的实现和结果放在 [docs/](docs/)：
 
 - 项目实现: [docs/implementation_guide.md](docs/implementation_guide.md)
 - 可视化报告: [docs/progress_visual_report.md](docs/progress_visual_report.md)
 - 模型 leaderboard 与 grammar 解释: [docs/rna_stability_grammar_interpretation_report.md](docs/rna_stability_grammar_interpretation_report.md)
+- 模型实践细节与原理：[docs/models_submodule.md](docs/models_submodule.md)
 
 ## 研究思路
 
@@ -20,7 +21,9 @@
 - `trans`: 细胞环境中的调控因子，包括 RBP 表达、miRNA 表达、RBP binding / eCLIP 证据。
 - `context`: 组织或细胞系表达谱。最终希望在给定细胞环境后，预测同一 RNA 序列在不同细胞中的稳定性变化，并设计能改变 RNA 稳定性的序列模块。
 
-第一阶段先回答一个更基础的问题：RNA 序列本身是否已经包含可泛化的稳定性语法。如果 sequence-only 模型在严格划分下能稳定预测 RNA stability，并且解释分析能得到合理的 motif / k-mer / region signal，再进入细胞系特异多模态建模会更稳。
+第一阶段先回答一个基础问题：RNA 序列本身是否已经包含可泛化的稳定性语法。希望 sequence-only 模型在严格划分下能稳定预测 RNA stability，并且解释分析能得到合理的 motif / k-mer / region signal。
+
+第一阶段只用序列本身（sequence-only），验证信号是否真实存在，再逐步加入 trans 和 context。即先证明 baseline 信号真实，再做复杂建模
 
 ## 技术原理
 
@@ -42,7 +45,7 @@ log2_stability_6h_2h = log2((signal_6h + pseudo) / (signal_2h + pseudo))
 log2_stability_6h_0h = log2((signal_6h + pseudo) / (signal_0h + pseudo))
 ```
 
-第一阶段主标签采用更保守的 `gene_sense` consensus median of `log2_stability_6h_2h`。它是相对稳定性 proxy，不是绝对 half-life。
+第一阶段在 16 个细胞系里，对每个基因取 `gene_sense` 口径下的 `log2_stability_6h_2h` 中位数，作为这个基因的稳定性标签。它是相对稳定性的代理指标，不是绝对 half-life。
 
 ## 当前数据
 
@@ -51,19 +54,21 @@ log2_stability_6h_0h = log2((signal_6h + pseudo) / (signal_0h + pseudo))
 | 数据层 | 当前产物 |
 | --- | --- |
 | ENCODE metadata | 16 个细胞系，48 个 cell-line/time-point experiments |
-| 原始量化文件 | 96 个 gene quantification TSV，每个实验 2 个 biological replicates |
-| stability target | [data/processed/stability_targets_gene_sense.tsv](data/processed/stability_targets_gene_sense.tsv)，150,233 条 gene x cell-line 记录 |
+| 原始量化文件 | 96 个 gene quantification TSV，每个实验 2 个生物学重复 |
+| stability target | [data/processed/stability_targets_gene_sense.tsv](data/processed/stability_targets_gene_sense.tsv)，150,233 条 基因 × 细胞系 记录 |
 | consensus target | 10,907 个基因，主标签为跨细胞系 `log2_stability_6h_2h` median |
 | replicate QC | 2,789,664 条 gene-cell_line-time 记录；48 个 experiment-level QC |
 | transcript sequence | GENCODE v29 representative transcript，full / 5'UTR / CDS / 3'UTR 全部映射 |
 | compact features | 10,907 x 1,346，包含 region length、GC/AU composition、3/4-mer 和 motif count |
 | pretrained LM embedding | Nucleotide Transformer 5'UTR / CDS / 3'UTR frozen embeddings，拼接后 3,840 维 |
 
-`exon_sense` 与 `gene_sense` 标签在共享 gene x cell-line 行上的 Pearson = 0.855，Spearman = 0.836；在 gene-level consensus 上 Pearson = 0.868，Spearman = 0.862。说明当前标签不是某一种 feature definition 偶然造成的。
+`exon_sense` 与 `gene_sense` 标签在共享 gene x cell-line 行上的 Pearson = 0.855，Spearman = 0.836；在 gene-level consensus 上 Pearson = 0.868，Spearman = 0.862。说明这个信号不依赖于某一种特定的特征定义方式 。
 
 Replicate-level QC 整体较好：48 个 cell-line-time experiment 的重复 Pearson 平均值为 0.959，中位数为 0.972。HepG2 的 2h / 6h replicate concordance 偏低，是后续解释时需要关注的风险点。
 
 ## 模型结果
+
+> 模型实现原理及比较参阅：[docs/models_submodule.md](docs/models_submodule.md)
 
 当前统一比较使用两类严格评估：
 
@@ -85,9 +90,9 @@ Replicate-level QC 整体较好：48 个 cell-line-time experiment 的重复 Pea
 
 目前结论：
 
-1. RNA stability 存在可检测的 context-agnostic sequence signal。
+1. RNA 稳定性中存在可被检测到的、不依赖细胞环境的纯序列信号。
 2. 当前最强模型仍是 compact k-mer / motif / composition XGBoost-GPU。
-3. Conv-tokenized Transformer 是目前最好的 deep sequence model，但还没有超过 compact XGBoost。
+3. Conv-tokenized Transformer 是目前最好的深度序列模型，但还没有超过 compact XGBoost。
 4. Pretrained Nucleotide Transformer embedding 有稳定性信号；与 compact features 融合后接近 compact XGBoost，但没有形成超越。
 
 ## RNA Stability Grammar
@@ -106,7 +111,7 @@ CDS k-mer > 3'UTR k-mer > full-region k-mer > 5'UTR k-mer
 
 [docs/rna_stability_grammar_interpretation_report.md](docs/rna_stability_grammar_interpretation_report.md)
 
-这些结果仍是计算候选，下一步可做 in silico perturbation、motif clustering 和 residual analysis等
+这些结果仍是计算候选，下一步可做 in silico perturbation（计算机虚拟扰动）、motif clustering （调控元件聚类）和 residual analysis（残差分析）等
 
 ## 仓库结构
 

@@ -1,6 +1,6 @@
 # Implementation Guide
 
-本文档面向新合作者和未来的自己：说明这个仓库的实现方式、目录职责、代码边界、数据流和扩展方式。项目思路、技术原理和关键结果已经集中到 `README.md`；这里保留实现层面的细节。
+本文档面向未来的自己：说明这个仓库的实现方式、目录功能、代码边界、数据流和扩展方式。项目思路、技术原理和关键结果已经集中到 `README.md`；这里保留实现层面的细节。
 
 ## 顶层结构
 
@@ -73,7 +73,7 @@ data/
 └── processed/
 ```
 
-职责：
+功能：
 
 - `data/raw/`: 原始下载文件，例如 ENCODE quantification TSV。
 - `data/external/`: 外部参考文件，例如 GENCODE GTF/FASTA、motif database。
@@ -93,7 +93,7 @@ docs/figures/
 docs/implementation_guide.md
 ```
 
-职责：
+功能：
 
 - `implementation_guide.md`: 仓库结构、模块边界、数据流和扩展说明。
 - `progress_visual_report.md`: 当前进度的图文报告，由 `rse write-visual-report` 生成。
@@ -129,7 +129,7 @@ workflow/Snakefile
 
 新增长期功能时，应该同步新增测试。
 
-## 源码模块边界
+## 源码模块
 
 源码在：
 
@@ -151,6 +151,37 @@ cli.py
 interpretation.py
 models/
 ```
+### 模块功能总览
+
+| 模块                | 功能                                          |
+| ------------------- | --------------------------------------------- |
+| `config.py`         | 读取配置文件，提供全局参数                    |
+| `encode.py`         | 从 ENCODE 数据库查询和下载数据                |
+| `quant.py`          | 解析下载的定量文件，计算稳定性标签            |
+| `analysis.py`       | 标签质量控制、共识标签生成、建模主表构建      |
+| `annotation.py`     | 解析基因组注释，切分 5'UTR / CDS / 3'UTR 序列 |
+| `features.py`       | 从序列提取 k 联体、调控元件、碱基组成等特征   |
+| `models/`           | 所有机器学习和深度学习模型                    |
+| `visualization.py`  | 生成图表和可视化报告                          |
+| `interpretation.py` | 生成模型排行榜和序列语法解释报告              |
+| `cli.py`            | 命令行入口，统一暴露所有功能                  |
+
+### models/ 子模块
+
+> 详细描述各脚本原理可见：[docs/models_submodule.md](docs/models_submodule.md)
+
+| 模块                       | 功能                                                   |
+| -------------------------- | ---------------------------------------------------------- |
+| `baselines.py`              | 基线模型，Ridge、ElasticNet、RandomForest、XGBoost         |
+| `evaluation.py`              | 评估逻辑，重复随机划分、染色体留出、特征消融               |
+| `multimodal.py`              | 多模态模型骨架，序列 + 表达量融合                          |
+| `rna_bert.py `               | DNABERT 风格的 RNA k-mer编码器                            |
+| `rna_lm_embeddings.py`       | 预训练语言模型嵌入提取                                     |
+| `saluki_like.py`             | Saluki 风格卷积神经网络 + 门控循环单元                     |
+| `sequence_cnn.py`            | 区域感知卷积神经网络                                       |
+| `sequence_transformer.py`    | 卷积分词 Transformer                                       |
+
+------
 
 ### `config.py`
 
@@ -570,29 +601,3 @@ docs/*.md
 - 大数据目录被 `.gitignore` 忽略。
 - 测试位于 `tests/`。
 - 配置集中在 `configs/project.yaml`。
-
-后续补强：
-
-1. 增加 `environment.yml` 或 `requirements-lock.txt`，固定 HPC / 服务器环境。
-2. 为大型产物增加 checksum 或 manifest，方便跨机器搬运。
-3. 将长时间 GPU 训练整理为 profile 或独立 Snakemake rule group，避免默认工作流过重。
-4. 给外部大文件增加下载状态检查和更清晰的错误提示。
-
-## 阅读顺序
-
-建议顺序：
-
-1. `README.md`
-2. `docs/rna_stability_grammar_interpretation_report.md`
-3. `docs/implementation_guide.md`
-4. `configs/project.yaml`
-5. `src/rna_stability_elements/cli.py`
-6. 对应模块源码和 `tests/`
-
-如果只想快速看成果，打开：
-
-```text
-docs/progress_visual_report.md
-```
-
-如果想复现流程，从 README 的命令开始。

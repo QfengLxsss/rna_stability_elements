@@ -26,7 +26,7 @@
 
 ![Grammar overview](figures/progress_grammar_overview.png)
 
-## 图 5. 数据漏斗与标签构建
+## 图 5. 数据与标签构建
 
 ![Data funnel](figures/data_funnel.png)
 
