@@ -12,6 +12,7 @@
 - 可视化报告: [docs/progress_visual_report.md](docs/progress_visual_report.md)
 - 模型 leaderboard 与 grammar 解释: [docs/rna_stability_grammar_interpretation_report.md](docs/rna_stability_grammar_interpretation_report.md)
 - 模型实践细节与原理：[docs/models_submodule.md](docs/models_submodule.md)
+- 项目数据处理全流程分析：[docs/data_processing_overview.md](docs/data_processing_overview.md)
 
 ## 研究思路
 
