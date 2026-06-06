@@ -1,0 +1,3 @@
+feat: add strict four-label analysis and GPU benchmarks
+
+Add replicate-aware target QC, parallel gene/exon stability labels, full GPU deep-learning benchmarks, reproducible figures, and updated technical documentation.
