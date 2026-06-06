@@ -1,4 +1,7 @@
-# RNA Stability Elements: 可视化进展报告
+# RNA Stability Elements: 历史单标签可视化进展报告
+
+> **历史报告。** 本文档记录早期 `gene_sense + log2(6h/2h)` 单标签阶段，不代表当前四标签
+> 或 GPU-full 最终结论。当前入口请阅读 [current_results.md](current_results.md)。
 
 ## 当前做到哪里了
 
@@ -6,7 +9,7 @@
 
 - 建模基因数: 10,907
 - GENCODE v29 sequence mapped genes: 10,907
-- 当前主标签: `gene_sense` consensus median of `log2_stability_6h_2h`
+- 该历史阶段主标签: `gene_sense` consensus median of `log2_stability_6h_2h`
 - 当前最佳严格模型: xgboost_gpu (all)，repeated random Pearson = 0.512，chromosome holdout Pearson = 0.496
 - 最新模型和语法解释: `docs/rna_stability_grammar_interpretation_report.md`
 

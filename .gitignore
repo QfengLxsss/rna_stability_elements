@@ -3,6 +3,8 @@ __pycache__/
 *.pyc
 .pytest_cache/
 .ruff_cache/
+.matplotlib/
+logs/
 data/raw/
 data/interim/*
 data/processed/*

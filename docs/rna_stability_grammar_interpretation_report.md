@@ -1,5 +1,8 @@
 # RNA Stability Grammar Interpretation Report
 
+> **历史报告。** 本文档保存早期单标签 sequence grammar 探索。当前四标签结果与证据边界请
+> 以 [current_results.md](current_results.md) 为准。
+
 ## 1. 统一模型 Leaderboard
 
 ### Chromosome Holdout Top Models

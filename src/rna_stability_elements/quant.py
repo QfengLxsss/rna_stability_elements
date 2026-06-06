@@ -37,9 +37,13 @@ def read_genic_quantification(
     frame = pd.read_csv(path, sep="\t", header=None, names=GENIC_COLUMNS, comment="#")
     if feature_type is not None:
         frame = frame[frame["feature_type"] == feature_type].copy()
-    gene_parts = frame["gene_id_symbol"].astype(str).str.split("/", n=1, expand=True)
-    frame["gene_id"] = gene_parts[0].str.replace(r"\.\d+$", "", regex=True)
-    frame["gene_symbol"] = gene_parts[1].fillna(gene_parts[0]) if gene_parts.shape[1] > 1 else gene_parts[0]
+    if frame.empty:
+        frame["gene_id"] = pd.Series(dtype=str)
+        frame["gene_symbol"] = pd.Series(dtype=str)
+    else:
+        gene_parts = frame["gene_id_symbol"].astype(str).str.split("/", n=1, expand=True)
+        frame["gene_id"] = gene_parts[0].str.replace(r"\.\d+$", "", regex=True)
+        frame["gene_symbol"] = gene_parts[1].fillna(gene_parts[0]) if gene_parts.shape[1] > 1 else gene_parts[0]
     numeric_columns = [
         "start",
         "end",

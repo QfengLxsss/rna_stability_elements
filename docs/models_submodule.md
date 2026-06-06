@@ -1,5 +1,9 @@
 # `models/` 子模块说明
 
+> 当前四标签 GPU-full 结果见 [current_results.md](current_results.md) 和
+> [parallel_model_suite_report.md](parallel_model_suite_report.md)。本文档主要说明模型实现，
+> 部分示例命令来自早期单标签阶段。
+
 本文档介绍 `src/rna_stability_elements/models/` 下各脚本的模型构建思路、数据输入、输出结果和代码实现方式。该子模块服务于 RNA stability prediction：用人工构建的序列特征、预训练 RNA/DNA 语言模型嵌入，以及 5'UTR/CDS/3'UTR 原始序列来预测 `target_label`，通常对应 consensus RNA stability label。
 
 ## 总览
@@ -630,5 +634,4 @@ from rna_stability_elements.models.sequence_cnn import ...
 4. 只用训练子集拟合数值特征 imputer/scaler。
 5. 根据 validation loss 保存 best state。
 6. 在测试集上反标准化预测值，并输出统一回归指标。
-
 
