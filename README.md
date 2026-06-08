@@ -9,14 +9,15 @@
 
 ## 当前结论
 
-严格质控后形成四套平行标签：
+严格质控后形成四套平行标签，并已在完全一致的 cohort 与固定 split 上完成六种模型的公平
+比较：
 
-| 标签 | 模型可用基因数 | 当前最佳 GPU-full 原始序列模型 | Repeated-random Pearson | Chromosome-holdout Pearson |
-| --- | ---: | --- | ---: | ---: |
-| `gene_sense + 6h/2h` | 8,428 | Transformer | 0.469 | 0.427 |
-| `gene_sense + 6h/0h` | 9,848 | Transformer | 0.522 | 0.472 |
-| `exon_sense + 6h/2h` | 9,018 | Saluki-like | 0.511 | 0.485 |
-| `exon_sense + 6h/0h` | 9,881 | Saluki-like | **0.748** | **0.763** |
+| 标签 | 模型可用基因数 | Repeated-random 最佳模型 / Pearson | Chromosome-holdout 最佳模型 / Pearson |
+| --- | ---: | --- | --- |
+| `gene_sense + 6h/2h` | 8,428 | XGBoost / 0.507 | XGBoost / 0.504 |
+| `gene_sense + 6h/0h` | 9,848 | XGBoost / 0.575 | XGBoost / 0.544 |
+| `exon_sense + 6h/2h` | 9,018 | XGBoost / 0.544 | XGBoost / 0.546 |
+| `exon_sense + 6h/0h` | 9,881 | RandomForest / **0.774** | XGBoost / **0.778** |
 
 目前最稳健的观察是：
 
@@ -25,12 +26,21 @@
    和 abundance-linked 信号，不能直接等同于纯降解速率。
 3. `6h/2h` 标签更保守、极端值更少；`6h/0h` 重复一致性和序列可预测性更强。因此两者
    应继续平行分析。
-4. Transformer 更适合当前 `gene_sense` 标签；Saluki-like 更适合当前 `exon_sense`
-   标签。
-5. XGBoost + 人工特征仍非常有竞争力，但由于输入表示和训练预算不同，当前排名只能解释为
-   完整 pipeline 比较，不能作为纯模型架构优劣结论。
+4. XGBoost 在全部 chromosome-holdout 和 3/4 repeated-random 任务中领先；唯一例外是
+   `exon_sense + 6h/0h` 的 repeated-random 中位数由 RandomForest 以 0.003 的差距领先。
+5. 公平 benchmark 比较的是完整 pipeline；人工特征模型与原始序列模型输入不同，排名不能
+   单独归因于模型架构。
+6. XGBoost 输入消融显示 CDS 是最关键区域；仅使用 k-mer 已保留大部分完整性能，而当前
+   motif panel 单独预测能力有限。
+7. GPU-full 深度输入消融进一步确认 CDS 是主要区域；去除 CDS 的跨模型平均
+   chromosome-holdout Pearson 损失为 0.059，而 CDS-only 平均仅损失 0.017。
+8. raw sequence + engineered features hybrid 在 12/12 个深度模型-标签组合中提升性能，
+   跨组合平均 chromosome-holdout Pearson 增益为 0.037。
+9. Transformer hybrid 输入设计筛选显示 `medium_balanced`（5'UTR/CDS/3'UTR =
+   256/1024/1024）仍是最稳健默认设置；更长窗口没有稳定增益，固定总长度下增加 3'UTR
+   配额反而降低性能。
 
-![Current results overview](docs/figures/current_results_overview.png)
+![Fair benchmark overview](docs/figures/fair_benchmark_overview.png)
 
 ## 数据与评估设计
 
@@ -59,11 +69,19 @@ total chase: log2_stability_6h_0h = log2((signal_6h + 0.1) / (signal_0h + 0.1))
 - `repeated_random`: 3 次随机基因拆分；
 - `chromosome_holdout`: 23 个染色体分别作为测试集。
 
-GPU-full 深度实验共完成 4 标签 × 3 模型 × 26 splits = **312 次训练**。
+GPU-full 深度实验共完成 4 标签 × 3 模型 × 26 splits = **312 次训练**。深度结果经逐 split
+测试基因审计后全部可复用；Full ElasticNet、RandomForest 与 XGBoost 另完成 **312 次拟合**。
+深度输入消融另完成 7 个新条件 × 4 标签 × 3 模型 × 26 splits = **2,184 次 CUDA 训练**。
+Transformer hybrid 输入设计筛选另完成 13 个新配置 × 2 标签 × 26 splits =
+**676 次 CUDA 训练**，并复用已审计的 `medium_balanced` hybrid 结果扩展到四标签三模型。
 
 ## 项目入口
 
 - [当前成果、限制与下一步](docs/current_results.md)
+- [公平模型比较报告](docs/fair_benchmark_report.md)
+- [输入信息消融报告](docs/input_ablation_report.md)
+- [深度原始序列区域消融与 hybrid 报告](docs/deep_input_ablation_report.md)
+- [深度 hybrid 输入设计报告](docs/deep_input_design_report.md)
 - [文档索引](docs/README.md)
 - [数据处理流程](docs/data_processing_overview.md)
 - [实现与复现指南](docs/implementation_guide.md)
@@ -136,11 +154,9 @@ PYTHONPATH=src python scripts/run_parallel_deep_gpu_full.py \
 
 ## 下一步优先级
 
-1. 使用完全相同 splits 和训练预算运行 Full XGBoost / RandomForest，完成公平 pipeline 比较。
-2. 进行原始序列长度、裁剪策略和 5'UTR/CDS/3'UTR 区域消融。
-3. 构建 raw sequence + engineered features 的 hybrid 深度模型。
-4. 使用 SHAP、attribution 和 in-silico mutagenesis 识别稳健候选调控元件。
-5. 将四标签共享信号与标签特异信号分开，避免把 processing 或 abundance 信号误解释为 decay。
+1. 使用 SHAP、attribution 和 in-silico mutagenesis 识别稳健候选调控元件。
+2. 将四标签共享信号与标签特异信号分开，避免把 processing 或 abundance 信号误解释为 decay。
+3. 以 `medium_balanced` hybrid 作为默认深度输入，探索 cell-line context-aware 模型。
 
 ## 数据来源与方法参考
 

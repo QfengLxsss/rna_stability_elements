@@ -12,6 +12,17 @@ PYTHONPATH=src python scripts/run_four_way_label_analysis.py
 PYTHONPATH=src python scripts/summarize_parallel_label_models.py
 PYTHONPATH=src python scripts/make_parallel_deep_sequence_tables.py
 PYTHONPATH=src python scripts/run_parallel_deep_gpu_full.py --gpus 0,1,2,3 --n-repeats 3
+PYTHONPATH=src python scripts/build_fair_benchmark_manifests.py
+PYTHONPATH=src python scripts/run_fair_classical_benchmark.py --gpus 0,1,2,3
+PYTHONPATH=src python scripts/benchmark_fair_deep_cost.py --gpus 0,1,2,3
+PYTHONPATH=src python scripts/summarize_fair_benchmark.py
+PYTHONPATH=src python scripts/run_input_ablation_benchmark.py --gpus 0,1,2,3
+PYTHONPATH=src python scripts/summarize_input_ablation.py
+PYTHONPATH=src python scripts/run_deep_input_ablation_gpu_full.py --gpus 0,1,2,3 --n-repeats 3
+PYTHONPATH=src python scripts/summarize_deep_input_ablation.py
+PYTHONPATH=src python scripts/run_deep_input_design_gpu_full.py --stage screen --gpus 0,1,2,3 --n-repeats 3
+PYTHONPATH=src python scripts/summarize_deep_input_design.py
+PYTHONPATH=src python scripts/run_deep_input_design_gpu_full.py --stage expand --best-config medium_balanced --gpus 0,1,2,3 --n-repeats 3
 PYTHONPATH=src python scripts/build_current_results.py
 ```
 
@@ -24,6 +35,16 @@ PYTHONPATH=src python scripts/build_current_results.py
 | `summarize_parallel_deep_gpu_full.py` | 汇总 GPU-full 指标 |
 | `summarize_parallel_model_suite.py` | 汇总传统模型、CPU quick 和 GPU-full 结果 |
 | `generate_current_results_figures.py` | 生成当前阶段统一结果图与 source data |
+| `build_fair_benchmark_manifests.py` | 冻结四套共享 cohort、split manifest，并审计深度结果复用 |
+| `run_fair_classical_benchmark.py` | 在固定 splits 上运行 Full ElasticNet、RandomForest 与 XGBoost |
+| `benchmark_fair_deep_cost.py` | 在固定 split 上统一测量三个深度模型的训练成本 |
+| `summarize_fair_benchmark.py` | 汇总六模型性能、方差、配对差异、成本并生成论文级图与报告 |
+| `run_input_ablation_benchmark.py` | 在固定 splits 上运行 XGBoost 区域与特征类型输入消融 |
+| `summarize_input_ablation.py` | 汇总输入消融配对差异并生成报告与论文级图 |
+| `run_deep_input_ablation_gpu_full.py` | GPU-full 深度原始序列区域消融与 sequence + engineered hybrid |
+| `summarize_deep_input_ablation.py` | 汇总深度输入消融、配对差异并生成报告与论文级图 |
+| `run_deep_input_design_gpu_full.py` | 两阶段运行 hybrid 窗口、裁剪与固定预算区域分配实验 |
+| `summarize_deep_input_design.py` | 汇总输入设计筛选、自动选择最佳配置并追踪扩展状态 |
 | `build_current_results.py` | 一键刷新当前结果汇总与图表 |
 
 ## 探索与历史脚本

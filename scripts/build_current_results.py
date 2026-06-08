@@ -9,6 +9,10 @@ STEPS = [
     "summarize_parallel_deep_gpu_full.py",
     "summarize_parallel_model_suite.py",
     "generate_current_results_figures.py",
+    "summarize_fair_benchmark.py",
+    "summarize_input_ablation.py",
+    "summarize_deep_input_ablation.py",
+    "summarize_deep_input_design.py",
 ]
 
 

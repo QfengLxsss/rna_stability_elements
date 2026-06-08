@@ -72,7 +72,60 @@ PYTHONPATH=src python scripts/run_parallel_deep_gpu_full.py \
 - 指标文件存在时自动跳过，支持中断后恢复；
 - 日志写入 `logs/parallel_deep_gpu_full/`。
 
-### 4. 刷新结果表、报告图和 source data
+### 4. 构建并运行固定 split 公平 benchmark
+
+```bash
+PYTHONPATH=src python scripts/build_fair_benchmark_manifests.py
+PYTHONPATH=src python scripts/run_fair_classical_benchmark.py --gpus 0,1,2,3
+PYTHONPATH=src python scripts/benchmark_fair_deep_cost.py --gpus 0,1,2,3
+PYTHONPATH=src python scripts/summarize_fair_benchmark.py
+```
+
+现有 GPU-full 深度性能结果只有在 `fair_benchmark_deep_reuse_audit.tsv` 逐 split 精确通过后
+才复用。深度成本脚本仅在固定 `random_repeat_0` 上重训，用于统一测量计算成本。
+
+### 5. 运行人工特征输入信息消融
+
+```bash
+PYTHONPATH=src python scripts/run_input_ablation_benchmark.py --gpus 0,1,2,3
+PYTHONPATH=src python scripts/summarize_input_ablation.py
+```
+
+该实验使用固定 fair-benchmark manifests，对 XGBoost 运行区域 only、structured
+leave-one-region-out，以及 length/composition/motif/k-mer 特征类型消融。
+
+### 6. 运行深度原始序列区域消融与 hybrid
+
+```bash
+PYTHONPATH=src python scripts/run_deep_input_ablation_gpu_full.py \
+  --gpus 0,1,2,3 \
+  --n-repeats 3
+PYTHONPATH=src python scripts/summarize_deep_input_ablation.py
+```
+
+该实验复用 raw-all 结果，并正式运行单区域 only、leave-one-region-out 和
+raw sequence + engineered features hybrid；所有新增结果逐 split 对固定 manifest 审计。
+
+### 7. 运行深度 hybrid 输入设计筛选
+
+```bash
+PYTHONPATH=src python scripts/run_deep_input_design_gpu_full.py \
+  --stage screen \
+  --gpus 0,1,2,3 \
+  --n-repeats 3
+PYTHONPATH=src python scripts/summarize_deep_input_design.py
+PYTHONPATH=src python scripts/run_deep_input_design_gpu_full.py \
+  --stage expand \
+  --best-config medium_balanced \
+  --gpus 0,1,2,3 \
+  --n-repeats 3
+```
+
+筛选阶段优先使用 Transformer hybrid，在 `gene_sense + 6h/2h` 与 `exon_sense + 6h/2h`
+上比较 short/medium/long 窗口、四种裁剪策略，以及固定总长度下 CDS-heavy 和 3'UTR-heavy
+配额。若最佳配置为已完成的 `medium_balanced`，扩展阶段会直接复用已审计 hybrid 结果。
+
+### 8. 刷新结果表、报告图和 source data
 
 ```bash
 PYTHONPATH=src python scripts/build_current_results.py
@@ -84,6 +137,10 @@ PYTHONPATH=src python scripts/build_current_results.py
 summarize_parallel_deep_gpu_full.py
 summarize_parallel_model_suite.py
 generate_current_results_figures.py
+summarize_fair_benchmark.py
+summarize_input_ablation.py
+summarize_deep_input_ablation.py
+summarize_deep_input_design.py
 ```
 
 ## 当前关键结果文件
@@ -94,6 +151,17 @@ data/processed/parallel_label_feature_tables.tsv
 data/processed/parallel_label_model_comparison.tsv
 data/processed/parallel_deep_gpu_full_summary.tsv
 data/processed/parallel_model_suite_summary.tsv
+data/processed/fair_benchmark_cohort_summary.tsv
+data/processed/fair_benchmark_summary.tsv
+data/processed/fair_benchmark_paired_differences.tsv
+data/processed/fair_benchmark_cost_summary.tsv
+data/processed/input_ablation_summary.tsv
+data/processed/input_ablation_paired_differences.tsv
+data/processed/deep_input_ablation_summary.tsv
+data/processed/deep_input_ablation_paired_differences.tsv
+data/processed/deep_input_design_summary.tsv
+data/processed/deep_input_design_paired_differences.tsv
+data/processed/deep_input_design_screen_ranking.tsv
 data/processed/figure_source_data/
 ```
 
@@ -110,7 +178,7 @@ parallel_deep_gpu_full_<model>_<label_id>_history.tsv
 - `full_deep_gpu`: 默认完整模型规模、early stopping、3 次随机拆分和 23 个染色体留出。
 - `quick_deep_cpu`: 早期流程验证，不用于最终模型排名。
 - `quick_compact`: 轻量传统模型 benchmark，适合筛选但不是最终公平比较。
-- `full`: 当前主要指 ElasticNet 完整 split 评估。
+- `full`: 完整模型设置，使用全部 3 个 repeated-random 和 23 个 chromosome-holdout splits。
 
 比较模型时必须同时说明：
 
@@ -132,6 +200,15 @@ PYTHONPATH=src python scripts/generate_current_results_figures.py
 ```text
 docs/figures/current_results_overview.{png,svg,pdf}
 docs/figures/gpu_full_model_comparison.{png,svg,pdf}
+docs/figures/fair_benchmark_overview.{png,svg,pdf}
+docs/figures/fair_benchmark_split_distributions.{png,svg,pdf}
+docs/figures/fair_benchmark_chromosome_heatmap.{png,svg,pdf}
+docs/figures/input_ablation_overview.{png,svg,pdf}
+docs/figures/input_ablation_chromosome_holdout.{png,svg,pdf}
+docs/figures/deep_input_ablation_chromosome_holdout.{png,svg,pdf}
+docs/figures/deep_input_ablation_paired_differences.{png,svg,pdf}
+docs/figures/deep_input_design_screen_ranking.{png,svg,pdf}
+docs/figures/deep_input_design_screen_paired_differences.{png,svg,pdf}
 data/processed/figure_source_data/*.tsv
 ```
 
@@ -153,8 +230,7 @@ python -m py_compile scripts/*.py
 
 ## 已知技术债务
 
-- 四标签实验仍由项目级脚本编排，尚未全部迁移到 CLI/Snakemake。
-- Full XGBoost/RandomForest 尚未与深度模型共享完全一致的 split manifest。
-- 当前 split 由各运行函数确定，应进一步保存为显式 manifest。
+- 四标签与公平 benchmark 实验仍由项目级脚本编排，尚未全部迁移到 CLI/Snakemake。
+- 当前计算成本基于每套标签的固定 `random_repeat_0`，不是全部 26 splits 的总成本。
 - 旧报告仍包含早期单标签和 hybrid 模型结果，阅读时应以
   `docs/current_results.md` 为当前入口。

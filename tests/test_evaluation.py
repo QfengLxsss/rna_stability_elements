@@ -7,10 +7,28 @@ from rna_stability_elements.models.evaluation import (
     chromosome_holdout_splits,
     evaluate_sequence_models,
     feature_groups,
+    input_ablation_feature_sets,
     numeric_feature_columns,
     repeated_random_splits,
     resolve_feature_set,
 )
+
+
+def test_input_ablation_feature_sets_separate_full_and_structured_regions():
+    columns = [
+        "full_length",
+        "full_kmer_AAA",
+        "5utr_length",
+        "5utr_motif_CPE_count",
+        "cds_gc_fraction",
+        "3utr_kmer_AAAA",
+    ]
+    sets = input_ablation_feature_sets(columns)
+
+    assert sets["full_only"] == ["full_length", "full_kmer_AAA"]
+    assert sets["structured_regions"] == columns[2:]
+    assert sets["utr_only"] == ["5utr_length", "5utr_motif_CPE_count", "3utr_kmer_AAAA"]
+    assert sets["structured_no_3utr"] == ["5utr_length", "5utr_motif_CPE_count", "cds_gc_fraction"]
 from rna_stability_elements.models.rna_bert import encode_kmer_block
 from rna_stability_elements.models.rna_lm_embeddings import (
     format_sequence_for_lm,

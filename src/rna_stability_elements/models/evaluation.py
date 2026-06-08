@@ -193,6 +193,42 @@ def feature_groups(numeric_columns: Iterable[str]) -> dict[str, list[str]]:
     return groups
 
 
+def input_ablation_feature_sets(numeric_columns: Iterable[str]) -> dict[str, list[str]]:
+    """Build interpretable feature sets for fixed-split input-information ablation."""
+    columns = list(numeric_columns)
+    groups = feature_groups(columns)
+
+    def union(*names: str) -> list[str]:
+        selected = set().union(*(groups[name] for name in names))
+        return [column for column in columns if column in selected]
+
+    structured = union("5utr_region", "cds_region", "3utr_region")
+    return {
+        "all_regions": columns,
+        "full_only": groups["full_region"],
+        "structured_regions": structured,
+        "5utr_only": groups["5utr_region"],
+        "cds_only": groups["cds_region"],
+        "3utr_only": groups["3utr_region"],
+        "utr_only": union("5utr_region", "3utr_region"),
+        "structured_no_5utr": [
+            column for column in structured if not column.startswith("5utr_")
+        ],
+        "structured_no_cds": [
+            column for column in structured if not column.startswith("cds_")
+        ],
+        "structured_no_3utr": [
+            column for column in structured if not column.startswith("3utr_")
+        ],
+        "simple_length_composition": union("length", "composition"),
+        "length_only": groups["length"],
+        "composition_only": groups["composition"],
+        "motif_only": groups["motif"],
+        "kmer3_only": groups["kmer3"],
+        "kmer4_only": groups["kmer4"],
+    }
+
+
 def resolve_feature_set(feature_set: str, numeric_columns: list[str], groups: dict[str, list[str]]) -> list[str]:
     if feature_set in groups:
         return groups[feature_set]
