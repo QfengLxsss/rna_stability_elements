@@ -393,12 +393,19 @@ def make_multitask_split_indices(
     *,
     split_name: str,
     label_ids: Iterable[str] = LABEL_IDS,
-) -> tuple[np.ndarray, np.ndarray, dict[str, np.ndarray], dict[str, dict[str, object]]]:
+) -> tuple[
+    np.ndarray,
+    np.ndarray,
+    dict[str, np.ndarray],
+    dict[str, np.ndarray],
+    dict[str, dict[str, object]],
+]:
     processed = Path(processed_dir)
     label_ids = list(label_ids)
     all_test_genes: set[str] = set()
     all_validation_genes: set[str] = set()
     test_by_label: dict[str, np.ndarray] = {}
+    validation_by_label: dict[str, np.ndarray] = {}
     split_metadata: dict[str, dict[str, object]] = {}
     for label_id in label_ids:
         manifest = pd.read_csv(processed / f"fair_benchmark_splits_{label_id}.tsv", sep="\t")
@@ -410,6 +417,7 @@ def make_multitask_split_indices(
         all_test_genes.update(test_genes)
         all_validation_genes.update(val_genes)
         test_by_label[label_id] = table.index[table["gene_id"].isin(test_genes)].to_numpy()
+        validation_by_label[label_id] = table.index[table["gene_id"].isin(val_genes)].to_numpy()
         row = split_manifest.iloc[0]
         split_metadata[label_id] = {
             "evaluation": row["evaluation"],
@@ -422,6 +430,7 @@ def make_multitask_split_indices(
     return (
         table.index[train_mask].to_numpy(),
         table.index[validation_mask].to_numpy(),
+        validation_by_label,
         test_by_label,
         split_metadata,
     )
@@ -441,6 +450,7 @@ def train_ramht_split(
     learning_rate: float = 2e-4,
     weight_decay: float = 1e-4,
     task_weights: Iterable[float] = (1.2, 1.0, 1.2, 1.0),
+    prediction_roles: Iterable[str] = ("test",),
     random_state: int = 13,
     device: str = "cuda",
 ) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
@@ -452,9 +462,15 @@ def train_ramht_split(
         torch.cuda.manual_seed_all(random_state)
     label_ids = list(label_ids)
     target_columns = [TARGET_COLUMNS[label_id] for label_id in label_ids]
-    train_index, val_index, test_by_label, split_metadata = make_multitask_split_indices(
+    train_index, val_index, validation_by_label, test_by_label, split_metadata = make_multitask_split_indices(
         table, processed_dir, split_name=split_name, label_ids=label_ids
     )
+    prediction_roles = tuple(prediction_roles)
+    unknown_roles = set(prediction_roles) - {"validation", "test"}
+    if unknown_roles:
+        raise ValueError(f"Unknown prediction roles: {sorted(unknown_roles)}")
+    if "test" not in prediction_roles:
+        raise ValueError("prediction_roles must include 'test' because test metrics are always reported.")
 
     target_values = table[target_columns].to_numpy(dtype=np.float32)
     target_mask = ~np.isnan(target_values)
@@ -544,23 +560,32 @@ def train_ramht_split(
     prediction_frames = []
     gate_rows = []
     for task_index, label_id in enumerate(label_ids):
-        test_index = test_by_label[label_id]
-        test_dataset = RamhtDataset(
-            encoded_regions,
-            encoded_codons,
-            numeric,
-            target_values,
-            target_mask,
-            test_index,
-            y_mean,
-            y_std,
-        )
-        test_loader = torch.utils.data.DataLoader(
-            test_dataset, batch_size=batch_size, shuffle=False, pin_memory=pin_memory
-        )
-        pred_std, gate_values = _predict_ramht(model, test_loader, device=device)
-        y_pred = pred_std[:, task_index] * y_std[task_index] + y_mean[task_index]
-        y_true = table.loc[test_index, target_columns[task_index]].to_numpy(dtype=np.float32)
+        role_indices = {
+            "validation": validation_by_label[label_id],
+            "test": test_by_label[label_id],
+        }
+        role_outputs = {}
+        for prediction_role in prediction_roles:
+            prediction_index = role_indices[prediction_role]
+            prediction_dataset = RamhtDataset(
+                encoded_regions,
+                encoded_codons,
+                numeric,
+                target_values,
+                target_mask,
+                prediction_index,
+                y_mean,
+                y_std,
+            )
+            prediction_loader = torch.utils.data.DataLoader(
+                prediction_dataset, batch_size=batch_size, shuffle=False, pin_memory=pin_memory
+            )
+            pred_std, gate_values = _predict_ramht(model, prediction_loader, device=device)
+            y_pred = pred_std[:, task_index] * y_std[task_index] + y_mean[task_index]
+            y_true = table.loc[prediction_index, target_columns[task_index]].to_numpy(dtype=np.float32)
+            role_outputs[prediction_role] = (prediction_index, y_true, y_pred, gate_values)
+
+        test_index, y_true, y_pred, gate_values = role_outputs["test"]
         valid = ~np.isnan(y_true)
         metric_row = regression_metrics(y_true[valid], y_pred[valid])
         metadata = split_metadata[label_id]
@@ -593,18 +618,20 @@ def train_ramht_split(
             for column in ["gene_id", "gene_symbol", "chromosome", "replicate_qc_flag"]
             if column in table.columns
         ]
-        predictions = table.loc[test_index, prediction_columns].copy()
-        predictions["label_id"] = label_id
-        predictions["y_true"] = y_true
-        predictions["y_pred"] = y_pred
-        predictions["residual"] = predictions["y_pred"] - predictions["y_true"]
-        predictions["evaluation"] = metadata["evaluation"]
-        predictions["split_name"] = split_name
-        predictions["holdout_group"] = metadata["holdout_group"]
-        predictions["repeat"] = metadata["repeat"]
-        predictions["model"] = metric_row["model"]
-        predictions["feature_set"] = metric_row["feature_set"]
-        prediction_frames.append(predictions[predictions["y_true"].notna()])
+        for prediction_role, (prediction_index, role_y_true, role_y_pred, _role_gates) in role_outputs.items():
+            predictions = table.loc[prediction_index, prediction_columns].copy()
+            predictions["label_id"] = label_id
+            predictions["prediction_role"] = prediction_role
+            predictions["y_true"] = role_y_true
+            predictions["y_pred"] = role_y_pred
+            predictions["residual"] = predictions["y_pred"] - predictions["y_true"]
+            predictions["evaluation"] = metadata["evaluation"]
+            predictions["split_name"] = split_name
+            predictions["holdout_group"] = metadata["holdout_group"]
+            predictions["repeat"] = metadata["repeat"]
+            predictions["model"] = metric_row["model"]
+            predictions["feature_set"] = metric_row["feature_set"]
+            prediction_frames.append(predictions[predictions["y_true"].notna()])
         gate_rows.append(
             {
                 "label_id": label_id,

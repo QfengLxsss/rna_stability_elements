@@ -26,6 +26,7 @@ SEPARATE_CODON_STREAM="${SEPARATE_CODON_STREAM:-0}"
 TASK_SPECIFIC_GATES="${TASK_SPECIFIC_GATES:-0}"
 MASK_PADDING_ATTENTION="${MASK_PADDING_ATTENTION:-0}"
 ENGINEERED_OUTPUT_SKIP="${ENGINEERED_OUTPUT_SKIP:-0}"
+PREDICTION_ROLES="${PREDICTION_ROLES:-test}"
 PYTORCH_CUDA_ALLOC_CONF="${PYTORCH_CUDA_ALLOC_CONF:-max_split_size_mb:128}"
 LOG_DIR="${LOG_DIR:-logs/ramht}"
 
@@ -65,6 +66,7 @@ COMMAND=(python scripts/run_ramht_multitask.py
   --feature-hidden-dim "${FEATURE_HIDDEN_DIM}"
   --head-hidden-dim "${HEAD_HIDDEN_DIM}"
   --fusion-mode "${FUSION_MODE}")
+COMMAND+=(--prediction-roles "${PREDICTION_ROLES}")
 
 if [[ "${SEPARATE_CODON_STREAM}" == "1" ]]; then
   COMMAND+=(--separate-codon-stream)

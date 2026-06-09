@@ -80,6 +80,11 @@ def parse_args() -> argparse.Namespace:
         help="Add a direct per-task linear prediction path from engineered features.",
     )
     parser.add_argument("--random-state", type=int, default=13)
+    parser.add_argument(
+        "--prediction-roles",
+        default="test",
+        help="Comma-separated prediction roles to write: test or validation,test.",
+    )
     return parser.parse_args()
 
 
@@ -138,6 +143,7 @@ def main() -> None:
             weight_decay=args.weight_decay,
             random_state=args.random_state,
             device=args.device,
+            prediction_roles=[item.strip() for item in args.prediction_roles.split(",") if item.strip()],
         )
         metric_frames.append(metrics)
         prediction_frames.append(predictions)
