@@ -25,6 +25,10 @@
   与复用 raw-all 结果共同形成 8 条件完整矩阵。
 - 深度 hybrid 输入设计：完成 13 个新 Transformer hybrid 配置 × 2 个 6h/2h 代表标签 ×
   26 splits，共 676 次 CUDA 训练；最佳配置复用已审计 hybrid 结果扩展到四标签三模型。
+- 生物学解释汇总：整合四标签特征-标签相关、ElasticNet 系数、XGBoost 输入消融和深度
+  区域消融，生成区域、k-mer、motif、长度组成的解释性报告。
+- 机制解释补充：完成 codon-aware features、XGBoost group permutation importance 和
+  同义 CDS recoding in-silico perturbation。
 
 ## 核心结果
 
@@ -75,6 +79,12 @@
 8. Transformer hybrid 输入设计筛选选择 `medium_balanced`（256/1024/1024,
    `balanced` crop）作为默认配置；短窗口损失约 0.012 Pearson，长窗口没有稳定增益，
    中等总长度下 3'UTR-heavy 配额下降最明显。
+9. 单变量解释显示 GC-rich 与 C/G-rich k-mer 特征在四标签中方向一致；但消融证据更支持
+   CDS 是主要模型可用信息来源。当前 motif panel 信号可作为候选假设，不能单独作为机制结论。
+10. Codon-only 特征已能达到较强预测效果，但加入完整 engineered features 后只带来小幅
+    增益；group permutation 中 k-mer4/k-mer3 仍最重要，说明 codon 使用信号大多被
+    局部 k-mer/组成特征捕获。同义 CDS GC recoding 可显著改变预测值，支持
+    codon-usage-sensitive CDS signal。
 
 ## 当前证据边界
 
@@ -84,6 +94,11 @@
 - CPU quick 深度模型只用于早期流程验证，不应与 GPU-full 结果混为最终排名。
 - 当前深度窗口筛选支持中等 balanced 配置；`random` crop 只是固定 seed 的 per-transcript
   裁剪，尚未测试 per-epoch stochastic augmentation。
+- 当前生物学解释仍主要是 association 与输入消融证据，尚未完成 SHAP、position-level
+  attribution、in-silico mutagenesis 或外部 half-life 数据验证。
+- 当前 in-silico mutagenesis 是 XGBoost feature-model 上的同义 CDS recoding；现有
+  GPU-full 深度模型未保存 checkpoint，因此还不能直接做 Transformer/Saluki position-level
+  mutagenesis。
 
 ## 下一步工作
 
@@ -112,10 +127,27 @@
 - 最佳配置为 `medium_balanced`，因此四标签三模型扩展复用已完成的 hybrid 结果。
 - 完整结果见 [deep_input_design_report.md](deep_input_design_report.md)。
 
-### P0：生物学解释
+### 已完成：生物学解释第一版
 
-- 对 XGBoost 做 SHAP、特征组重要性和 motif family 聚类。
-- 对 Transformer/Saluki-like 做 attribution 与 in-silico mutagenesis。
+- 汇总特征-标签 Spearman 相关、ElasticNet 系数、XGBoost 输入消融和深度区域消融。
+- 区分单变量 association map 与消融支持的预测信息来源：3'UTR/GC association 强，但
+  CDS 在预测消融中最关键。
+- 完整结果见 [biological_interpretation_report.md](biological_interpretation_report.md)。
+
+### 已完成：机制解释补充
+
+- 构建 codon frequency、amino-acid composition、codon-position GC/U、start/stop/frame 等
+  codon-aware features。
+- 使用代表性固定 splits 比较 engineered、codon-only、engineered+codon XGBoost。
+- 使用 `random_repeat_0` 做 group-level permutation importance，并执行同义 CDS
+  GC-min/GC-max recoding perturbation。
+- 完整结果见 [mechanistic_interpretation_report.md](mechanistic_interpretation_report.md)。
+
+### P0：机制级解释升级
+
+- 可选安装 SHAP 后对 XGBoost 做 SHAP，与 permutation importance 交叉验证。
+- 重训并保存 Transformer/Saluki-like checkpoint 后做 position-level attribution 与
+  in-silico mutagenesis。
 - 优先保留跨 `gene_sense/exon_sense`、跨 `6h/2h` 与 `6h/0h` 可重复的候选元件。
 - 对候选基因和 motif 做 RBP motif、GO 与 Reactome 富集。
 
@@ -139,6 +171,14 @@
 - `data/processed/deep_input_design_summary.tsv`
 - `data/processed/deep_input_design_paired_differences.tsv`
 - `data/processed/deep_input_design_screen_ranking.tsv`
+- `data/processed/biological_feature_target_correlations.tsv`
+- `data/processed/biological_region_feature_signal.tsv`
+- `data/processed/biological_cross_label_candidate_features.tsv`
+- `data/processed/biological_motif_signal.tsv`
+- `data/processed/biological_length_composition_signal.tsv`
+- `data/processed/mechanistic_codon_xgboost_summary.tsv`
+- `data/processed/mechanistic_permutation_importance.tsv`
+- `data/processed/mechanistic_synonymous_mutagenesis_summary.tsv`
 - `data/processed/figure_source_data/`
 - `docs/figures/current_results_overview.{png,svg,pdf}`
 - `docs/figures/gpu_full_model_comparison.{png,svg,pdf}`
@@ -148,3 +188,10 @@
 - `docs/figures/deep_input_ablation_paired_differences.{png,svg,pdf}`
 - `docs/figures/deep_input_design_screen_ranking.{png,svg,pdf}`
 - `docs/figures/deep_input_design_screen_paired_differences.{png,svg,pdf}`
+- `docs/figures/biological_region_feature_signal.{png,svg,pdf}`
+- `docs/figures/biological_top_feature_heatmap.{png,svg,pdf}`
+- `docs/figures/biological_length_composition_signal.{png,svg,pdf}`
+- `docs/figures/biological_motif_signal.{png,svg,pdf}`
+- `docs/figures/mechanistic_codon_feature_performance.{png,svg,pdf}`
+- `docs/figures/mechanistic_permutation_importance.{png,svg,pdf}`
+- `docs/figures/mechanistic_synonymous_mutagenesis.{png,svg,pdf}`

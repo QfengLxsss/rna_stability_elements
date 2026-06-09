@@ -9,6 +9,14 @@
   raw sequence + engineered features hybrid 对照。
 - [deep_input_design_report.md](deep_input_design_report.md): Transformer hybrid 窗口预算、
   裁剪策略和固定总长度区域配额筛选。
+- [biological_interpretation_report.md](biological_interpretation_report.md): 区域、k-mer、
+  motif、长度组成信号的生物学解释性汇总。
+- [mechanistic_interpretation_report.md](mechanistic_interpretation_report.md): codon-aware
+  features、group permutation importance 和同义 CDS recoding 机制解释补充。
+- [ramht_model_plan.md](ramht_model_plan.md): Region-aware Multi-task Hybrid Transformer
+  架构、冒烟训练和正式 GPU 训练计划。
+- [ramht_gpu_handoff.md](ramht_gpu_handoff.md): 当前 RAMHT 设计、GPU 单 split 结果、
+  8 卡 split 并行训练方案和新会话交接说明。
 - [parallel_label_analysis_report.md](parallel_label_analysis_report.md): 四套严格标签的 QC 与
   ElasticNet 平行分析。
 - [parallel_model_suite_report.md](parallel_model_suite_report.md): 传统模型、CPU quick 与
@@ -43,6 +51,13 @@
 - `figures/deep_input_design_screen_ranking.{png,svg,pdf}`: Transformer hybrid 输入设计排名。
 - `figures/deep_input_design_screen_paired_differences.{png,svg,pdf}`: 输入设计相对
   `medium_balanced` 的配对差异。
+- `figures/biological_region_feature_signal.{png,svg,pdf}`: 区域 × 特征类型解释信号。
+- `figures/biological_top_feature_heatmap.{png,svg,pdf}`: 跨标签候选序列特征热图。
+- `figures/biological_length_composition_signal.{png,svg,pdf}`: 长度与组成信号热图。
+- `figures/biological_motif_signal.{png,svg,pdf}`: 当前 motif panel 信号热图。
+- `figures/mechanistic_codon_feature_performance.{png,svg,pdf}`: codon-aware 特征性能。
+- `figures/mechanistic_permutation_importance.{png,svg,pdf}`: XGBoost group permutation importance。
+- `figures/mechanistic_synonymous_mutagenesis.{png,svg,pdf}`: 同义 CDS recoding 预测扰动。
 - `figures/sample_signal_pca_gene_sense.png`: gene-sense 样本 PCA。
 - `figures/sample_signal_pca_exon_sense.png`: exon-sense 样本 PCA。
 

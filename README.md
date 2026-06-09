@@ -39,6 +39,11 @@
 9. Transformer hybrid 输入设计筛选显示 `medium_balanced`（5'UTR/CDS/3'UTR =
    256/1024/1024）仍是最稳健默认设置；更长窗口没有稳定增益，固定总长度下增加 3'UTR
    配额反而降低性能。
+10. 生物学解释性汇总显示，单变量 association 中 GC-rich / C/G-rich k-mer 信号很强，
+    但预测性消融更支持 CDS 是主要可用信息来源；当前 motif panel 只能作为候选机制线索。
+11. 机制解释补充实验显示 codon-only 特征本身具有较强预测力，但加入完整 engineered
+    features 后增益较小；group permutation 仍以 k-mer3/k-mer4 为主，同义 CDS recoding
+    可显著改变预测值，支持 codon-usage-sensitive CDS 信号。
 
 ![Fair benchmark overview](docs/figures/fair_benchmark_overview.png)
 
@@ -82,6 +87,8 @@ Transformer hybrid 输入设计筛选另完成 13 个新配置 × 2 标签 × 26
 - [输入信息消融报告](docs/input_ablation_report.md)
 - [深度原始序列区域消融与 hybrid 报告](docs/deep_input_ablation_report.md)
 - [深度 hybrid 输入设计报告](docs/deep_input_design_report.md)
+- [生物学解释报告](docs/biological_interpretation_report.md)
+- [机制解释补充报告](docs/mechanistic_interpretation_report.md)
 - [文档索引](docs/README.md)
 - [数据处理流程](docs/data_processing_overview.md)
 - [实现与复现指南](docs/implementation_guide.md)

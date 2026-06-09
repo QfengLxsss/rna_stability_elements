@@ -13,6 +13,7 @@ STEPS = [
     "summarize_input_ablation.py",
     "summarize_deep_input_ablation.py",
     "summarize_deep_input_design.py",
+    "summarize_biological_interpretation.py",
 ]
 
 

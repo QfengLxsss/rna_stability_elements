@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import numpy as np
 import pandas as pd
+import pytest
 
 from rna_stability_elements.models.evaluation import (
     chromosome_holdout_splits,
@@ -36,6 +37,7 @@ from rna_stability_elements.models.rna_lm_embeddings import (
     sequence_chunks,
     write_multi_region_rna_lm_embeddings,
 )
+from rna_stability_elements.models.ramht import RamhtConfig, build_ramht_model, encode_codons
 from rna_stability_elements.models.saluki_like import make_region_ids
 from rna_stability_elements.models.sequence_cnn import encode_sequence
 from rna_stability_elements.models.sequence_cnn import RegionLengths
@@ -210,3 +212,85 @@ def test_multi_region_rna_lm_embedding_merge(tmp_path):
     assert "lm_cds_emb_0000" in merged.columns
     assert "lm_3utr_emb_0000" in merged.columns
     assert merged.loc[0, "lm_cds_emb_0001"] == 4.0
+
+
+def test_ramht_codon_encoding():
+    frame = pd.DataFrame({"sequence_cds": ["AUGGCUUAA", "NNNAUG"]})
+
+    encoded = encode_codons(frame, codon_length=3, crop_strategy="balanced")
+
+    assert encoded.shape == (2, 3)
+    assert encoded[0].tolist() == [15, 40, 49]
+    assert encoded[1].tolist() == [0, 15, 0]
+
+
+def test_ramht_forward_small_model():
+    torch = pytest.importorskip("torch")
+    config = RamhtConfig(
+        region_lengths=RegionLengths(utr5=4, cds=6, utr3=4),
+        codon_length=2,
+        embedding_dim=4,
+        model_dim=16,
+        codon_dim=16,
+        transformer_layers=1,
+        codon_layers=1,
+        attention_heads=4,
+        feedforward_dim=32,
+        feature_hidden_dim=16,
+        head_hidden_dim=16,
+        dropout=0.0,
+        token_dropout=0.0,
+    )
+    model = build_ramht_model(config, feature_dim=5, n_tasks=4)
+    prediction, gate = model(
+        {
+            "5utr": torch.tensor([[1, 2, 0, 0], [1, 1, 2, 2]]),
+            "cds": torch.tensor([[1, 2, 3, 4, 0, 0], [1, 2, 3, 4, 1, 2]]),
+            "3utr": torch.tensor([[4, 3, 0, 0], [4, 4, 3, 3]]),
+            "codon": torch.tensor([[15, 0], [15, 28]]),
+            "_numeric": torch.zeros(2, 5),
+        }
+    )
+
+    assert prediction.shape == (2, 4)
+    assert gate.shape == (2, 3)
+    assert torch.allclose(gate.sum(dim=1), torch.ones(2))
+
+
+def test_ramht_v2_task_specific_gates_and_empty_regions_are_finite():
+    torch = pytest.importorskip("torch")
+    config = RamhtConfig(
+        region_lengths=RegionLengths(utr5=4, cds=6, utr3=4),
+        codon_length=2,
+        embedding_dim=4,
+        model_dim=16,
+        codon_dim=16,
+        transformer_layers=1,
+        codon_layers=1,
+        attention_heads=4,
+        feedforward_dim=32,
+        feature_hidden_dim=16,
+        head_hidden_dim=16,
+        dropout=0.0,
+        token_dropout=0.0,
+        fusion_mode="gated_residual",
+        separate_codon_stream=True,
+        task_specific_gates=True,
+        mask_padding_attention=True,
+        engineered_output_skip=True,
+    )
+    model = build_ramht_model(config, feature_dim=5, n_tasks=4)
+    prediction, gate = model(
+        {
+            "5utr": torch.zeros(2, 4, dtype=torch.long),
+            "cds": torch.tensor([[1, 2, 3, 0, 0, 0], [1, 2, 3, 4, 1, 2]]),
+            "3utr": torch.zeros(2, 4, dtype=torch.long),
+            "codon": torch.tensor([[15, 0], [15, 28]]),
+            "_numeric": torch.zeros(2, 5),
+        }
+    )
+
+    assert prediction.shape == (2, 4)
+    assert gate.shape == (2, 4, 3)
+    assert torch.isfinite(prediction).all()
+    assert torch.allclose(gate.sum(dim=2), torch.ones(2, 4))

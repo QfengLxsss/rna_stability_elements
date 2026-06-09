@@ -125,7 +125,29 @@ PYTHONPATH=src python scripts/run_deep_input_design_gpu_full.py \
 上比较 short/medium/long 窗口、四种裁剪策略，以及固定总长度下 CDS-heavy 和 3'UTR-heavy
 配额。若最佳配置为已完成的 `medium_balanced`，扩展阶段会直接复用已审计 hybrid 结果。
 
-### 8. 刷新结果表、报告图和 source data
+### 8. 汇总生物学解释证据
+
+```bash
+PYTHONPATH=src python scripts/summarize_biological_interpretation.py
+```
+
+该脚本汇总四标签特征-标签 Spearman 相关、ElasticNet 系数、XGBoost 输入消融和深度
+区域消融，生成区域、k-mer、motif、长度组成信号的解释性报告。它用于提出候选机制，
+不等同于 SHAP、attribution 或外部实验验证。
+
+### 9. 运行机制解释补充实验
+
+```bash
+PYTHONPATH=src python scripts/run_mechanistic_interpretation.py --device cpu
+```
+
+默认运行代表性固定 split 机制筛选：`random_repeat_0` 加 `chr1`、`chr7`、`chr14`、
+`chr19`、`chr22`、`chrX` 六个 chromosome holdouts。该脚本构建 codon-aware features，
+比较 engineered/codon-only/engineered+codon XGBoost，运行 group permutation importance，
+并执行同义 CDS GC-min/GC-max recoding perturbation。若要全量 split，可加
+`--split-scope all`。
+
+### 10. 刷新结果表、报告图和 source data
 
 ```bash
 PYTHONPATH=src python scripts/build_current_results.py
@@ -141,6 +163,7 @@ summarize_fair_benchmark.py
 summarize_input_ablation.py
 summarize_deep_input_ablation.py
 summarize_deep_input_design.py
+summarize_biological_interpretation.py
 ```
 
 ## 当前关键结果文件
@@ -162,6 +185,16 @@ data/processed/deep_input_ablation_paired_differences.tsv
 data/processed/deep_input_design_summary.tsv
 data/processed/deep_input_design_paired_differences.tsv
 data/processed/deep_input_design_screen_ranking.tsv
+data/processed/biological_feature_target_correlations.tsv
+data/processed/biological_region_feature_signal.tsv
+data/processed/biological_cross_label_candidate_features.tsv
+data/processed/biological_motif_signal.tsv
+data/processed/biological_length_composition_signal.tsv
+data/processed/mechanistic_codon_xgboost_metrics.tsv
+data/processed/mechanistic_codon_xgboost_summary.tsv
+data/processed/mechanistic_permutation_importance.tsv
+data/processed/mechanistic_synonymous_mutagenesis.tsv
+data/processed/mechanistic_synonymous_mutagenesis_summary.tsv
 data/processed/figure_source_data/
 ```
 
@@ -209,6 +242,13 @@ docs/figures/deep_input_ablation_chromosome_holdout.{png,svg,pdf}
 docs/figures/deep_input_ablation_paired_differences.{png,svg,pdf}
 docs/figures/deep_input_design_screen_ranking.{png,svg,pdf}
 docs/figures/deep_input_design_screen_paired_differences.{png,svg,pdf}
+docs/figures/biological_region_feature_signal.{png,svg,pdf}
+docs/figures/biological_top_feature_heatmap.{png,svg,pdf}
+docs/figures/biological_length_composition_signal.{png,svg,pdf}
+docs/figures/biological_motif_signal.{png,svg,pdf}
+docs/figures/mechanistic_codon_feature_performance.{png,svg,pdf}
+docs/figures/mechanistic_permutation_importance.{png,svg,pdf}
+docs/figures/mechanistic_synonymous_mutagenesis.{png,svg,pdf}
 data/processed/figure_source_data/*.tsv
 ```
 

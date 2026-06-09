@@ -8,6 +8,80 @@ from typing import Iterable
 import pandas as pd
 
 
+RNA_GENETIC_CODE = {
+    "UUU": "F",
+    "UUC": "F",
+    "UUA": "L",
+    "UUG": "L",
+    "UCU": "S",
+    "UCC": "S",
+    "UCA": "S",
+    "UCG": "S",
+    "UAU": "Y",
+    "UAC": "Y",
+    "UAA": "*",
+    "UAG": "*",
+    "UGU": "C",
+    "UGC": "C",
+    "UGA": "*",
+    "UGG": "W",
+    "CUU": "L",
+    "CUC": "L",
+    "CUA": "L",
+    "CUG": "L",
+    "CCU": "P",
+    "CCC": "P",
+    "CCA": "P",
+    "CCG": "P",
+    "CAU": "H",
+    "CAC": "H",
+    "CAA": "Q",
+    "CAG": "Q",
+    "CGU": "R",
+    "CGC": "R",
+    "CGA": "R",
+    "CGG": "R",
+    "AUU": "I",
+    "AUC": "I",
+    "AUA": "I",
+    "AUG": "M",
+    "ACU": "T",
+    "ACC": "T",
+    "ACA": "T",
+    "ACG": "T",
+    "AAU": "N",
+    "AAC": "N",
+    "AAA": "K",
+    "AAG": "K",
+    "AGU": "S",
+    "AGC": "S",
+    "AGA": "R",
+    "AGG": "R",
+    "GUU": "V",
+    "GUC": "V",
+    "GUA": "V",
+    "GUG": "V",
+    "GCU": "A",
+    "GCC": "A",
+    "GCA": "A",
+    "GCG": "A",
+    "GAU": "D",
+    "GAC": "D",
+    "GAA": "E",
+    "GAG": "E",
+    "GGU": "G",
+    "GGC": "G",
+    "GGA": "G",
+    "GGG": "G",
+}
+
+SYNONYMOUS_CODONS: dict[str, list[str]] = {}
+for _codon, _aa in RNA_GENETIC_CODE.items():
+    SYNONYMOUS_CODONS.setdefault(_aa, []).append(_codon)
+
+AMINO_ACIDS = sorted(set(RNA_GENETIC_CODE.values()))
+
+
 def read_fasta(path: str | Path) -> dict[str, str]:
     """Read a FASTA file into a name -> sequence dictionary."""
     sequences: dict[str, list[str]] = {}
@@ -111,6 +185,147 @@ def write_compact_sequence_model_features(
     Path(out).parent.mkdir(parents=True, exist_ok=True)
     features.to_csv(out, sep="\t", index=False)
     return features
+
+
+def codon_feature_table(
+    sequence_table: pd.DataFrame,
+    *,
+    target_column: str = "target_label",
+    cds_column: str = "sequence_cds",
+) -> pd.DataFrame:
+    """Build CDS codon, amino-acid, and reading-frame features."""
+    required = {"gene_id", target_column, cds_column}
+    missing = required - set(sequence_table.columns)
+    if missing:
+        raise ValueError(f"Sequence table missing required columns: {sorted(missing)}")
+
+    metadata_columns = [
+        "gene_id",
+        "gene_symbol",
+        "canonical_transcript_id",
+        "chromosome",
+        "strand",
+        "gene_biotype",
+        "transcript_biotype",
+        "sequence_status",
+        "replicate_qc_flag",
+        target_column,
+    ]
+    rows = []
+    for item in sequence_table.itertuples(index=False):
+        row = {
+            column: getattr(item, column)
+            for column in metadata_columns
+            if column in sequence_table.columns
+        }
+        row.update(codon_features(getattr(item, cds_column)))
+        rows.append(row)
+    return pd.DataFrame(rows)
+
+
+def write_codon_feature_table(
+    sequence_table_path: str | Path,
+    *,
+    out: str | Path,
+    target_column: str = "target_label",
+    cds_column: str = "sequence_cds",
+) -> pd.DataFrame:
+    sequence_table = pd.read_csv(sequence_table_path, sep="\t")
+    features = codon_feature_table(
+        sequence_table, target_column=target_column, cds_column=cds_column
+    )
+    Path(out).parent.mkdir(parents=True, exist_ok=True)
+    features.to_csv(out, sep="\t", index=False)
+    return features
+
+
+def codon_features(sequence: object) -> dict[str, float]:
+    """Compute coding-sequence features from frame-0 RNA codons."""
+    seq = normalize_rna(sequence if isinstance(sequence, str) else "")
+    codons = [seq[index : index + 3] for index in range(0, len(seq) - 2, 3)]
+    valid_codons = [codon for codon in codons if len(codon) == 3 and codon in RNA_GENETIC_CODE]
+    codon_count = len(valid_codons)
+    denom = max(codon_count, 1)
+    codon_counts = Counter(valid_codons)
+    aa_counts = Counter(RNA_GENETIC_CODE[codon] for codon in valid_codons)
+    output: dict[str, float] = {
+        "cds_codon_count": float(codon_count),
+        "cds_frame_remainder": float(len(seq) % 3),
+        "cds_has_start_aug": float(valid_codons[:1] == ["AUG"]),
+        "cds_terminal_stop": float(bool(valid_codons) and valid_codons[-1] in {"UAA", "UAG", "UGA"}),
+        "cds_internal_stop_fraction": float(
+            sum(codon in {"UAA", "UAG", "UGA"} for codon in valid_codons[:-1]) / max(codon_count - 1, 1)
+        ),
+    }
+    for codon in sorted(RNA_GENETIC_CODE):
+        output[f"cds_codon_{codon}"] = codon_counts[codon] / denom
+    for aa in AMINO_ACIDS:
+        output[f"cds_aa_{aa}"] = aa_counts[aa] / denom
+    for position in range(3):
+        bases = [codon[position] for codon in valid_codons]
+        pos_denom = max(len(bases), 1)
+        output[f"cds_codon_pos{position + 1}_gc_fraction"] = (
+            sum(base in {"G", "C"} for base in bases) / pos_denom
+        )
+        output[f"cds_codon_pos{position + 1}_u_fraction"] = sum(base == "U" for base in bases) / pos_denom
+    output["cds_synonymous_family_entropy"] = synonymous_family_entropy(valid_codons)
+    output["cds_mean_synonymous_gc_rank"] = mean_synonymous_gc_rank(valid_codons)
+    return output
+
+
+def synonymous_family_entropy(codons: list[str]) -> float:
+    values = []
+    for aa, family in SYNONYMOUS_CODONS.items():
+        if aa == "*" or len(family) <= 1:
+            continue
+        counts = [codons.count(codon) for codon in family]
+        total = sum(counts)
+        if total == 0:
+            continue
+        probabilities = [count / total for count in counts if count]
+        values.append(-sum(value * _log2(value) for value in probabilities))
+    return float(sum(values) / max(len(values), 1))
+
+
+def mean_synonymous_gc_rank(codons: list[str]) -> float:
+    ranks = []
+    for codon in codons:
+        aa = RNA_GENETIC_CODE.get(codon)
+        family = SYNONYMOUS_CODONS.get(aa or "", [])
+        if len(family) <= 1:
+            continue
+        ordered = sorted(family, key=lambda item: (gc_count(item), item))
+        ranks.append(ordered.index(codon) / max(len(ordered) - 1, 1))
+    return float(sum(ranks) / max(len(ranks), 1))
+
+
+def synonymous_recoded_sequence(sequence: object, *, mode: str) -> str:
+    """Recode CDS with synonymous codons while preserving amino-acid sequence."""
+    if mode not in {"min_gc", "max_gc"}:
+        raise ValueError("mode must be 'min_gc' or 'max_gc'.")
+    seq = normalize_rna(sequence if isinstance(sequence, str) else "")
+    output = []
+    reverse = mode == "max_gc"
+    for index in range(0, len(seq) - 2, 3):
+        codon = seq[index : index + 3]
+        aa = RNA_GENETIC_CODE.get(codon)
+        family = SYNONYMOUS_CODONS.get(aa or "", [codon])
+        if len(family) <= 1:
+            output.append(codon)
+        else:
+            output.append(sorted(family, key=lambda item: (gc_count(item), item), reverse=reverse)[0])
+    output.append(seq[len(output) * 3 :])
+    return "".join(output)
+
+
+def gc_count(sequence: str) -> int:
+    return sum(base in {"G", "C"} for base in sequence)
+
+
+def _log2(value: float) -> float:
+    import math
+
+    return math.log(value, 2)
 
 
 def merge_feature_tables(
